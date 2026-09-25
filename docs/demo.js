@@ -1,7 +1,7 @@
 /* Browser-side stand-in for server.py: same /api/* contract, runs entirely in this tab.
    Folders: File System Access API (Chrome/Edge). Images: canvas. Video: ffmpeg.wasm (H.264 only). */
 (()=>{
-const VEXT=['.mp4','.mkv','.mov','.avi','.webm','.m4v','.wmv','.flv'];
+const VEXT=['.mp4','.mkv','.mov','.avi','.webm','.m4v','.wmv','.flv','.mpg','.mpeg','.ts'];
 const H={inp:null,out:null};
 const BLANK=()=>({status:'idle',kind:'images',total:0,done:0,partial:0,start:0,end:0,in_bytes:0,out_bytes:0,converted:0,verified:0,noparams:0,flattened:0,skipped:0,problems:0,overtarget:0,error:''});
 let S=BLANK(), EST={status:'idle'}, cancel=false, CUR=0;
