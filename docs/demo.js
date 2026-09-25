@@ -10,16 +10,37 @@ const want=(n,kind)=>{const e=ext(n);return (kind!=='videos'&&e==='.png')||(kind
 const isVid=n=>VEXT.includes(ext(n));
 
 async function walk(dir,kind,skipDir,rel=[],out=[]){
+  if(dir.fb)return dir.files.filter(f=>want(f.name,kind)&&!f.name.toLowerCase().includes('.part.')).map(f=>({dir:null,rel:f.webkitRelativePath.split('/').slice(1,-1),name:f.name,h:{getFile:async()=>f}}));
   for await(const [name,h] of dir.entries()){
     if(h.kind==='directory'){ if(skipDir&&await h.isSameEntry(skipDir))continue; await walk(h,kind,skipDir,[...rel,name],out); }
     else if(want(name,kind)&&!name.toLowerCase().includes('.part.'))out.push({dir,rel,name,h});
   }
   return out;
 }
+const same=()=>H.inp.fb?{zip:true,entries:[],name:H.inp.name}:H.inp;
 const outDir=()=>H.out&&H.inp&&H.out===H.inp?null:H.out;
-async function dirAt(root,rel){for(const n of rel)root=await root.getDirectoryHandle(n,{create:true});return root;}
-async function exists(d,n){try{await d.getFileHandle(n);return true}catch{return false}}
-async function put(d,n,blob){const w=await (await d.getFileHandle(n,{create:true})).createWritable();await w.write(blob);await w.close();}
+async function dirAt(root,rel){if(root.zip)return {zip:root,rel};for(const n of rel)root=await root.getDirectoryHandle(n,{create:true});return root;}
+async function exists(d,n){if(d.zip)return false;try{await d.getFileHandle(n);return true}catch{return false}}
+async function put(d,n,blob){if(d.zip){d.zip.entries.push([d.rel.concat(n).join('/'),new Uint8Array(await blob.arrayBuffer())]);return;}const w=await (await d.getFileHandle(n,{create:true})).createWritable();await w.write(blob);await w.close();}
+
+/* ---- zip (store-only) for browsers that can't write to a folder ---- */
+const CRC=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+const crc=b=>{let c=~0;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return ~c>>>0;};
+function zip(entries){
+  const enc=new TextEncoder(),parts=[],cd=[];let off=0;
+  for(const [name,data] of entries){
+    const n=enc.encode(name),c=crc(data),h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x800,true);h.setUint32(14,c,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,n.length,true);
+    parts.push(h.buffer,n,data);
+    const d=new DataView(new ArrayBuffer(46));
+    d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint16(8,0x800,true);d.setUint32(16,c,true);d.setUint32(20,data.length,true);d.setUint32(24,data.length,true);d.setUint16(28,n.length,true);d.setUint32(42,off,true);
+    cd.push(d.buffer,n);off+=30+n.length+data.length;
+  }
+  const size=cd.reduce((a,x)=>a+(x.byteLength??x.length),0),e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,entries.length,true);e.setUint16(10,entries.length,true);e.setUint32(12,size,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cd,e.buffer],{type:'application/zip'});
+}
+function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),6e4);}
 
 /* ---- images ---- */
 async function image(file,mode,q){
@@ -91,11 +112,12 @@ async function run(b){
         await put(d,name,blob);if(r.flat)S.flattened++;S.noparams++;   // canvas drops metadata
       }
       S.out_bytes+=blob.size;
-      if(b.delete_orig&&!(dst===H.inp&&name===it.name))await it.dir.removeEntry(it.name).catch(()=>{});
+      if(b.delete_orig&&!(dst===H.inp&&name===it.name))await it.dir?.removeEntry(it.name).catch(()=>{});
     }catch(e){console.error(e);S.problems++;}
     S.done++;
   };
   await pool(items,b.workers,one);await pool(vids,1,one);
+  if(H.out.zip&&H.out.entries.length){download(zip(H.out.entries),'compressed.zip');H.out.entries=[];}
   S.status=cancel?'cancelled':'done';S.end=Date.now()/1000;
 }
 async function estimate(b){
@@ -120,18 +142,22 @@ async function estimate(b){
 window.DEMO=async(path,body)=>{
   if(path==='/api/state'){const end=S.end||Date.now()/1000;return {...S,partial:S.status==='running'?CUR:0,elapsed:S.start?end-S.start:0,ffmpeg:true,est:EST};}
   if(path==='/api/pick'){
-    if(!window.showDirectoryPicker){alert('The folder demo needs Chrome or Edge on a computer.');return {path:''};}
+    if(!window.showDirectoryPicker){   // Firefox/Safari: read a folder via <input webkitdirectory>, hand results back as a ZIP
+      if(/output/i.test(body.title)){H.out={zip:true,entries:[],name:'Download as ZIP'};return {path:H.out.name};}
+      const i=document.getElementById('demoDir')||Object.assign(document.body.appendChild(document.createElement('input')),{id:'demoDir',type:'file',hidden:true,webkitdirectory:true,multiple:true});
+      return new Promise(res=>{i.value='';i.onchange=()=>{const f=[...i.files];if(!f.length)return res({path:''});H.inp={fb:true,files:f,name:f[0].webkitRelativePath.split('/')[0]};H.out=H.out?.zip?H.out:null;const d=document.getElementById('del');if(d){d.checked=false;d.disabled=true;}res({path:H.inp.name});};i.oncancel=()=>res({path:''});i.click();});
+    }
     try{const h=await showDirectoryPicker({mode:'readwrite'}),w=/output/i.test(body.title)?'out':'inp';H[w]=h;return {path:h.name};}catch{return {path:''};}
   }
   if(path==='/api/scan'){
     const ok=H.inp&&body.input===H.inp.name;if(!ok)return {valid:false,count:0,bytes:0};
-    if(body.output&&body.output===body.input)H.out=H.inp;
+    if(body.output&&body.output===body.input)H.out=same();
     const fs=await walk(H.inp,body.kind,outDir());let bytes=0;for(const f of fs)bytes+=(await f.h.getFile()).size;
     return {valid:true,count:fs.length,bytes};
   }
   if(path==='/api/start'||path==='/api/estimate'){
     if(!H.inp||body.input!==H.inp.name)throw new Error('input');
-    if(body.output===body.input)H.out=H.inp;else if(!H.out||body.output!==H.out.name)throw new Error('output');
+    if(body.output===body.input)H.out=same();else if(!H.out||body.output!==H.out.name)throw new Error('output');
     body.video={...body.video,codec:'h264',engine:'cpu'};
     (path==='/api/start'?run:estimate)(body);return {ok:true};
   }
