@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Media Compressor demo</title>
+<style>:root{color-scheme:light dark}body{font:16px system-ui;max-width:640px;margin:2rem auto;padding:0 16px}
+#drop{border:2px dashed gray;border-radius:12px;padding:2.5rem;text-align:center}table{width:100%;border-collapse:collapse;margin-top:1rem}td{padding:6px;border-bottom:1px solid #8884}
+a{color:inherit}</style>
+<h1>Media Compressor - browser demo</h1>
+<p>Drop images to re-encode them as WebP right here. Nothing is uploaded. The full app (folders, video, AV1/H.265) is <a href="https://github.com/FrCynda/media-compressor/releases">a Windows download</a>.</p>
+<label>Quality <input id=q type=range min=10 max=95 value=70> <output id=qo>70</output></label>
+<div id=drop>Drop images here or <input id=f type=file accept="image/*" multiple></div>
+<table id=t></table>
+<script>
+const kb=b=>(b/1024).toFixed(0)+' KB', t=document.getElementById('t');
+q.oninput=()=>qo.value=q.value;
+async function go(files){for(const file of files){
+  const bmp=await createImageBitmap(file),c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;
+  c.getContext('2d').drawImage(bmp,0,0);
+  const blob=await new Promise(r=>c.toBlob(r,'image/webp',q.value/100));
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name.replace(/\.\w+$/,'')+'.webp';a.textContent='download';
+  const r=t.insertRow();r.insertCell().textContent=file.name;r.insertCell().textContent=kb(file.size)+' → '+kb(blob.size)+' ('+Math.round(100-blob.size/file.size*100)+'% smaller)';r.insertCell().append(a);}}
+f.onchange=()=>go(f.files);
+drop.ondragover=e=>e.preventDefault();drop.ondrop=e=>{e.preventDefault();go([...e.dataTransfer.files].filter(x=>x.type.startsWith('image/')))};
+</script>
