@@ -145,7 +145,7 @@ window.DEMO=async(path,body)=>{
     if(!window.showDirectoryPicker){   // Firefox/Safari: read a folder via <input webkitdirectory>, hand results back as a ZIP
       if(/output/i.test(body.title)){H.out={zip:true,entries:[],name:'Download as ZIP'};return {path:H.out.name};}
       const i=document.getElementById('demoDir')||Object.assign(document.body.appendChild(document.createElement('input')),{id:'demoDir',type:'file',hidden:true,webkitdirectory:true,multiple:true});
-      return new Promise(res=>{i.value='';i.onchange=()=>{const f=[...i.files];if(!f.length)return res({path:''});H.inp={fb:true,files:f,name:f[0].webkitRelativePath.split('/')[0]};H.out=H.out?.zip?H.out:null;const d=document.getElementById('del');if(d){d.checked=false;d.disabled=true;}res({path:H.inp.name});};i.oncancel=()=>res({path:''});i.click();});
+      return new Promise(res=>{i.value='';i.onchange=()=>{const f=[...i.files];if(!f.length)return res({path:''});H.inp={fb:true,files:f,name:f[0].webkitRelativePath.split('/')[0]};H.out=H.out?.zip?H.out:null;const d=document.getElementById('del');if(d){d.checked=false;d.disabled=true;}res({path:H.inp.name});};i.click();});
     }
     try{const h=await showDirectoryPicker({mode:'readwrite'}),w=/output/i.test(body.title)?'out':'inp';H[w]=h;return {path:h.name};}catch{return {path:''};}
   }
