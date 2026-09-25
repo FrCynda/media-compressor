@@ -256,6 +256,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:24px}
 <script src="ffmpeg/ffmpeg.js"></script>
 <script src="demo.js"></script>
 <script>
+try{if(!self.crossOriginIsolated&&isSecureContext&&navigator.serviceWorker){navigator.serviceWorker.register("coi-sw.js").then(()=>{if(!navigator.serviceWorker.controller&&!sessionStorage.coi){sessionStorage.coi=1;location.reload();}}).catch(()=>{});}}catch(e){}
 const TOKEN="__TOKEN__";
 const $=id=>document.getElementById(id);
 async function api(path,body){

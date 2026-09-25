@@ -21,19 +21,19 @@ const same=()=>H.inp.fb?{zip:true,entries:[],name:H.inp.name}:H.inp;
 const outDir=()=>H.out&&H.inp&&H.out===H.inp?null:H.out;
 async function dirAt(root,rel){if(root.zip)return {zip:root,rel};for(const n of rel)root=await root.getDirectoryHandle(n,{create:true});return root;}
 async function exists(d,n){if(d.zip)return false;try{await d.getFileHandle(n);return true}catch{return false}}
-async function put(d,n,blob){if(d.zip){d.zip.entries.push([d.rel.concat(n).join('/'),new Uint8Array(await blob.arrayBuffer())]);return;}const w=await (await d.getFileHandle(n,{create:true})).createWritable();await w.write(blob);await w.close();}
+async function put(d,n,blob,mtime){if(d.zip){d.zip.entries.push([d.rel.concat(n).join('/'),new Uint8Array(await blob.arrayBuffer()),mtime]);return;}const w=await (await d.getFileHandle(n,{create:true})).createWritable();await w.write(blob);await w.close();}
 
 /* ---- zip (store-only) for browsers that can't write to a folder ---- */
 const CRC=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
 const crc=b=>{let c=~0;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return ~c>>>0;};
 function zip(entries){
   const enc=new TextEncoder(),parts=[],cd=[];let off=0;
-  for(const [name,data] of entries){
-    const n=enc.encode(name),c=crc(data),h=new DataView(new ArrayBuffer(30));
-    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x800,true);h.setUint32(14,c,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,n.length,true);
+  for(const [name,data,mt] of entries){
+    const n=enc.encode(name),c=crc(data),h=new DataView(new ArrayBuffer(30)),D=new Date(mt||Date.now()),tm=D.getHours()<<11|D.getMinutes()<<5|D.getSeconds()>>1,dt=(Math.max(D.getFullYear(),1980)-1980)<<9|(D.getMonth()+1)<<5|D.getDate();
+    h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x800,true);h.setUint16(10,tm,true);h.setUint16(12,dt,true);h.setUint32(14,c,true);h.setUint32(18,data.length,true);h.setUint32(22,data.length,true);h.setUint16(26,n.length,true);
     parts.push(h.buffer,n,data);
     const d=new DataView(new ArrayBuffer(46));
-    d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint16(8,0x800,true);d.setUint32(16,c,true);d.setUint32(20,data.length,true);d.setUint32(24,data.length,true);d.setUint16(28,n.length,true);d.setUint32(42,off,true);
+    d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint16(8,0x800,true);d.setUint16(12,tm,true);d.setUint16(14,dt,true);d.setUint32(16,c,true);d.setUint32(20,data.length,true);d.setUint32(24,data.length,true);d.setUint16(28,n.length,true);d.setUint32(42,off,true);
     cd.push(d.buffer,n);off+=30+n.length+data.length;
   }
   const size=cd.reduce((a,x)=>a+(x.byteLength??x.length),0),e=new DataView(new ArrayBuffer(22));
@@ -42,18 +42,75 @@ function zip(entries){
 }
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),6e4);}
 
+/* ---- oxipng (WASM, in workers) ---- */
+const OXW=[],OXP=new Map();let oxN=0,oxId=0;
+function oxi(bytes){
+  if(!OXW.length)for(let k=0;k<Math.min(8,navigator.hardwareConcurrency||4);k++){
+    const w=new Worker(new URL('oxipng/worker.js',location.href),{type:'module'});
+    w.onmessage=e=>{const p=OXP.get(e.data.id);OXP.delete(e.data.id);e.data.err?p.rej(new Error(e.data.err)):p.res(e.data.out);};OXW.push(w);
+  }
+  return new Promise((res,rej)=>{const id=++oxId;OXP.set(id,{res,rej});OXW[oxN++%OXW.length].postMessage({id,bytes,level:4},[bytes.buffer]);});
+}
+
+/* ---- PNG metadata -> JPEG (EXIF, ICC profile, 'parameters' text as EXIF UserComment) ---- */
+const inflate=async b=>new Uint8Array(await new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
+const nul=(b,from)=>b.indexOf(0,from);
+async function pngMeta(b){
+  const r={exif:null,icc:null,params:null},dec=(x,enc='latin1')=>new TextDecoder(enc).decode(x);
+  for(let o=8;o+12<=b.length;){
+    const len=new DataView(b.buffer,b.byteOffset+o).getUint32(0),t=dec(b.subarray(o+4,o+8)),d=b.subarray(o+8,o+8+len);o+=12+len;
+    try{
+      if(t==='eXIf')r.exif=d;
+      else if(t==='iCCP'){const k=nul(d,0);r.icc=await inflate(d.subarray(k+2));}
+      else if(t==='tEXt'||t==='zTXt'||t==='iTXt'){
+        const k=nul(d,0),key=dec(d.subarray(0,k));if(key!=='parameters')continue;
+        if(t==='tEXt')r.params=dec(d.subarray(k+1));
+        else if(t==='zTXt')r.params=dec(await inflate(d.subarray(k+2)));
+        else{const flag=d[k+1];let q=nul(d,k+3);q=nul(d,q+1);const x=d.subarray(q+1);r.params=dec(flag?await inflate(x):x,'utf-8');}
+      }
+    }catch(e){}
+  }
+  return r;
+}
+function exifFromParams(text){
+  const ascii=/^[\x00-\x7f]*$/.test(text),
+        body=ascii?Uint8Array.from(text,c=>c.charCodeAt(0)):(()=>{const u=new Uint8Array(text.length*2);for(let i=0;i<text.length;i++){u[2*i]=text.charCodeAt(i)&255;u[2*i+1]=text.charCodeAt(i)>>8;}return u;})(),
+        head=new TextEncoder().encode(ascii?'ASCII\0\0\0':'UNICODE\0'),n=head.length+body.length,out=new Uint8Array(44+n),v=new DataView(out.buffer);
+  out.set([0x49,0x49,0x2a,0,8,0,0,0]);v.setUint16(8,1,true);v.setUint16(10,0x8769,true);v.setUint16(12,4,true);v.setUint32(14,1,true);v.setUint32(18,26,true);v.setUint32(22,0,true);
+  v.setUint16(26,1,true);v.setUint16(28,0x9286,true);v.setUint16(30,7,true);v.setUint32(32,n,true);v.setUint32(36,44,true);v.setUint32(40,0,true);
+  out.set(head,44);out.set(body,44+head.length);return out;
+}
+async function withMeta(jpeg,m){
+  const segs=[],seg=(mk,payload)=>{const s=new Uint8Array(4+payload.length);s[0]=255;s[1]=mk;s[2]=(payload.length+2)>>8;s[3]=(payload.length+2)&255;s.set(payload,4);segs.push(s);};
+  const exif=m.exif||(m.params?exifFromParams(m.params):null);
+  if(exif&&exif.length<65000)seg(0xE1,new Uint8Array([69,120,105,102,0,0,...exif]));
+  if(m.icc){const CH=65000,n=Math.ceil(m.icc.length/CH);for(let i=0;i<n;i++)seg(0xE2,new Uint8Array([...[...'ICC_PROFILE\0'].map(c=>c.charCodeAt(0)),i+1,n,...m.icc.subarray(i*CH,(i+1)*CH)]));}
+  const keep=[jpeg.subarray(0,2)];   // drop the sRGB profile Chrome adds on its own
+  for(let o=2;o<jpeg.length;){
+    if(jpeg[o]!==255||jpeg[o+1]===0xDA){keep.push(jpeg.subarray(o));break;}
+    const len=(jpeg[o+2]<<8|jpeg[o+3])+2;
+    if(!(jpeg[o+1]===0xE2&&jpeg[o+4]===73&&jpeg[o+5]===67&&jpeg[o+6]===67))keep.push(jpeg.subarray(o,o+len));   // "ICC"
+    o+=len;
+  }
+  jpeg=new Uint8Array(await new Blob(keep).arrayBuffer());
+  if(!segs.length)return new Blob([jpeg],{type:'image/jpeg'});
+  let at=2;if(jpeg[2]===255&&jpeg[3]===0xE0)at=4+((jpeg[4]<<8)|jpeg[5]);   // after JFIF
+  return new Blob([jpeg.subarray(0,at),...segs,jpeg.subarray(at)],{type:'image/jpeg'});
+}
+
 /* ---- images ---- */
 async function image(file,mode,q){
-  const bmp=await createImageBitmap(file),c=new OffscreenCanvas(bmp.width,bmp.height),x=c.getContext('2d');
-  let flat=false;
-  if(mode==='jpg'){
-    x.drawImage(bmp,0,0);const d=x.getImageData(0,0,c.width,c.height).data;
-    for(let i=3;i<d.length;i+=4)if(d[i]<255){flat=true;break;}
-    x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
-    return {blob:await c.convertToBlob({type:'image/jpeg',quality:q/100}),flat,ext:'.jpg'};
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  if(mode==='png'){   // lossless: oxipng -o4 keeping every chunk, exactly like the app
+    const out=await oxi(bytes.slice());
+    return out.length<file.size?{blob:new Blob([out],{type:'image/png'}),flat:false,ext:'.png',meta:true}:{blob:file,flat:false,ext:'.png',meta:true};
   }
-  x.drawImage(bmp,0,0);const blob=await c.convertToBlob({type:'image/png'});
-  return blob.size<file.size?{blob,flat,ext:'.png'}:{blob:file,flat,ext:'.png'};   // keep the original if re-encoding doesn't help
+  const meta=await pngMeta(bytes),bmp=await createImageBitmap(file,{colorSpaceConversion:'none'}),c=new OffscreenCanvas(bmp.width,bmp.height),x=c.getContext('2d');
+  x.drawImage(bmp,0,0);const d=x.getImageData(0,0,c.width,c.height).data;let flat=false;
+  for(let i=3;i<d.length;i+=4)if(d[i]<255){flat=true;break;}
+  x.globalCompositeOperation='destination-over';x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+  const jpg=new Uint8Array(await (await c.convertToBlob({type:'image/jpeg',quality:q/100})).arrayBuffer());
+  return {blob:await withMeta(jpg,meta),flat,ext:'.jpg',meta:!!(meta.exif||meta.icc||meta.params),params:!!meta.params};
 }
 
 /* ---- video (ffmpeg.wasm, single thread, H.264) ---- */
@@ -63,8 +120,8 @@ async function ff(){
   const f=new FFmpegWASM.FFmpeg();
   f.on('log',({message})=>{const m=/Duration: (\d+):(\d+):([\d.]+)/.exec(message);if(m)ffDur=+m[1]*3600+ +m[2]*60+ +m[3];});
   f.on('progress',({progress})=>{CUR=Math.max(0,Math.min(1,progress));});
-  const b=new URL('ffmpeg/',location.href).href;
-  await f.load({classWorkerURL:b+'814.ffmpeg.js',coreURL:b+'ffmpeg-core.js',wasmURL:b+'ffmpeg-core.wasm'});
+  const b=new URL('ffmpeg/',location.href).href,mt=self.crossOriginIsolated?b+'mt/':b;   // threads need SharedArrayBuffer (cross-origin isolation)
+  await f.load({classWorkerURL:b+'814.ffmpeg.js',coreURL:mt+'ffmpeg-core.js',wasmURL:mt+'ffmpeg-core.wasm',...(mt!==b&&{workerURL:mt+'ffmpeg-core.worker.js'})});
   return FF=f;
 }
 async function video(file,o){
@@ -104,12 +161,12 @@ async function run(b){
         if(!b.overwrite&&await exists(d,name)){S.skipped++;S.out_bytes+=file.size;S.done++;return;}
         blob=await video(file,b.video);
         if(b.video.target_mb&&blob.size>b.video.target_mb*1048576)S.overtarget++;
-        await put(d,name,blob);S.converted++;
+        await put(d,name,blob,b.keep_dates?file.lastModified:0);S.converted++;
       }else{
         const r=await image(file,b.mode,b.quality);blob=r.blob;name=it.name.replace(/\.\w+$/,'')+r.ext;
         const d=await dirAt(dst,it.rel);
         if(!b.overwrite&&await exists(d,name)){S.skipped++;S.out_bytes+=file.size;S.done++;return;}
-        await put(d,name,blob);if(r.flat)S.flattened++;S.noparams++;   // canvas drops metadata
+        await put(d,name,blob,b.keep_dates?file.lastModified:0);if(r.flat)S.flattened++;if(b.mode==='png'||r.params)S.verified++;else S.noparams++;
       }
       S.out_bytes+=blob.size;
       if(b.delete_orig&&!(dst===H.inp&&name===it.name))await it.dir?.removeEntry(it.name).catch(()=>{});

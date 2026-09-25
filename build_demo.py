@@ -6,8 +6,12 @@ def sub(old, new):
     assert old in s, old
     s = s.replace(old, new, 1)
 
+# multi-threaded ffmpeg needs cross-origin isolation, which GitHub Pages can't send as headers: a service worker adds them
+COI = ('try{if(!self.crossOriginIsolated&&isSecureContext&&navigator.serviceWorker){'
+       'navigator.serviceWorker.register("coi-sw.js").then(()=>{if(!navigator.serviceWorker.controller&&!sessionStorage.coi){sessionStorage.coi=1;location.reload();}}).catch(()=>{});}}catch(e){}\n')
+
 sub('async function api(path,body){\n', 'async function api(path,body){\n  if(window.DEMO) return window.DEMO(path,body);\n')
-sub('<script>\nconst TOKEN', '<script src="ffmpeg/ffmpeg.js"></script>\n<script src="demo.js"></script>\n<script>\nconst TOKEN')
+sub('<script>\nconst TOKEN', '<script src="ffmpeg/ffmpeg.js"></script>\n<script src="demo.js"></script>\n<script>\n' + COI + 'const TOKEN')
 sub('<div class="tabs"', '<div class="msg warn" style="margin:0 0 16px"><b>Browser demo.</b> Runs in this tab on your own files (Chrome/Edge write straight into your output folder; Firefox/Safari read the source folder and give you the results as a ZIP): pick folders with Browse. Video is H.264 only (slow, ffmpeg.wasm); metadata and file dates are not preserved. AV1, H.265, GPU and lossless PNG optimising need the <a href="https://github.com/FrCynda/media-compressor/releases" style="color:inherit">Windows app</a>.</div>\n  <div class="tabs"')
 sub('placeholder="C:\\path\\to\\media"', 'placeholder="Click Browse" readonly')
 sub('placeholder="C:\\path\\to\\output"', 'placeholder="Click Browse" readonly')
