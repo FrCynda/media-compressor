@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f5bea'/%3E%3Cg fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='14' y='14' width='36' height='36' rx='6'/%3E%3Cpath d='M50 38 38 26 14 50'/%3E%3C/g%3E%3Ccircle cx='26' cy='26' r='3.5' fill='white'/%3E%3C/svg%3E">
+<title>Media Compressor</title>
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --surface2:#f8f9fb; --border:#e3e6eb; --text:#14171f; --muted:#5d6675;
+  --accent:#2f5bea; --accent-ink:#ffffff; --accent-soft:#e8eeff; --ok:#12805c; --ok-soft:#e3f5ee;
+  --warn:#a35a00; --warn-soft:#fff2df; --bad:#c62d3e; --bad-soft:#fdeaec; --track:#e6e9ef;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1116; --surface:#161a21; --surface2:#1b2029; --border:#272d38; --text:#e8ebf1; --muted:#9aa3b2;
+    --accent:#6f93ff; --accent-ink:#0b1020; --accent-soft:#1c2748; --ok:#43c79a; --ok-soft:#12261f;
+    --warn:#f0b35a; --warn-soft:#2b2110; --bad:#ff7a88; --bad-soft:#2c1418; --track:#242a35;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:40px 20px 64px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:22px}
+.logo{width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex:none}
+h1{font-size:22px;line-height:1.2;margin:0;font-weight:650;letter-spacing:-.01em}
+header p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.badge{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ok);background:var(--ok-soft);padding:6px 10px;border-radius:999px;white-space:nowrap}
+.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px;margin-bottom:16px;box-shadow:var(--shadow)}
+.tabs button{border:0;background:transparent;border-radius:10px;padding:11px 14px;justify-content:center;font-size:15px;color:var(--muted)}
+.tabs button[aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
+.tabs button:hover:not([aria-selected=true]){background:var(--surface2);border-color:transparent}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card h2{margin:0 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;display:flex;align-items:center;gap:10px}
+.step{width:22px;height:22px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:inline-grid;place-items:center;font-size:12px;font-weight:700;letter-spacing:0}
+.hint{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+.row{display:flex;gap:10px;align-items:stretch}
+input[type=text],input[type=number],select{font:inherit;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+input[type=text]{flex:1;min-width:0}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:10px 16px;font-weight:600;display:inline-flex;align-items:center;gap:8px;transition:background .12s,border-color .12s,transform .05s}
+button:hover:not(:disabled){background:var(--surface2);border-color:var(--muted)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;padding:13px 26px;font-size:15.5px}
+button.primary:hover:not(:disabled){background:var(--accent);filter:brightness(1.08);border-color:transparent}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button.link{border:0;background:none;color:var(--accent);padding:4px 0;font-weight:600}
+.scan{margin-top:10px;font-size:13.5px;color:var(--muted);min-height:20px}
+.scan b{color:var(--text)}
+.seg{display:grid;grid-template-columns:repeat(var(--n,2),1fr);gap:10px}
+.seg label{position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0}
+.opt{border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;background:var(--surface2);height:100%}
+.opt strong{display:block;font-size:15px}
+.opt span{color:var(--muted);font-size:13px}
+.seg input:checked+.opt{border-color:var(--accent);background:var(--accent-soft)}
+.seg input:focus-visible+.opt{outline:2px solid var(--accent);outline-offset:2px}
+.field{margin-top:20px}
+.field .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-weight:600}
+.field .top small{color:var(--muted);font-weight:500;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.ticks{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{padding:7px 12px;border-radius:999px;font-size:13.5px;background:var(--surface2)}
+.chip[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.sz{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.sz input{width:120px}
+details{margin-top:20px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)}
+summary{cursor:pointer;padding:12px 16px;font-weight:600;list-style:none;display:flex;justify-content:space-between}
+summary::after{content:"+";color:var(--muted)} details[open] summary::after{content:"\2212"}
+.adv{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;padding:4px 16px 16px}
+.adv label{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px}
+.adv select{width:100%;background:var(--surface)}
+.adv .full{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.actions{display:flex;gap:12px;align-items:center;margin:8px 0 16px}
+.actions .note{color:var(--muted);font-size:13px}
+.bar{height:12px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .35s ease}
+.bar.done>i{background:var(--ok)}
+.prog-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.pct{font-size:34px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.state{font-size:13.5px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.stat{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.stat .v{font-size:20px;font-weight:680;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stat .k{font-size:12.5px;color:var(--muted)}
+.stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)}
+.savings{margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--ok-soft);color:var(--ok);border-radius:12px;padding:14px 16px;font-weight:650}
+.savings small{font-weight:500;opacity:.9}
+.msg{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:14px}
+.msg.warn{background:var(--warn-soft);color:var(--warn)} .msg.bad{background:var(--bad-soft);color:var(--bad)}
+code{font-family:Consolas,monospace;background:var(--surface2);padding:2px 6px;border-radius:6px;user-select:all}
+[hidden]{display:none!important}
+dialog{border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);padding:0;max-width:440px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(10,14,22,.55);backdrop-filter:blur(2px)}
+dialog .dl{padding:24px}
+dialog h3{margin:0 0 8px;font-size:18px}
+dialog p{margin:0 0 20px;color:var(--muted);font-size:14.5px}
+dialog .dbtn{display:flex;justify-content:flex-end;gap:10px}
+button.warnbtn{background:var(--bad);color:#fff;border-color:transparent}
+button.warnbtn:hover:not(:disabled){background:var(--bad);filter:brightness(1.1);border-color:transparent}
+footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:24px}
+@media (max-width:640px){.grid{grid-template-columns:repeat(2,1fr)}.seg{grid-template-columns:1fr}.badge{display:none}.row{flex-direction:column}.adv{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-4.5-4.5L6 21"/></svg>
+    </div>
+    <div>
+      <h1>Media Compressor</h1>
+      <p>Shrink images and videos while keeping dimensions, frames and metadata.</p>
+    </div>
+    <span class="badge" title="This page talks only to a program on your own computer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      100% local &middot; nothing leaves this PC
+    </span>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="What to compress">
+    <button role="tab" id="tImg" aria-selected="true">Images (PNG)</button>
+    <button role="tab" id="tVid" aria-selected="false">Videos</button>
+    <button role="tab" id="tBoth" aria-selected="false">Images + Videos</button>
+  </div>
+
+  <section class="card">
+    <h2><span class="step">1</span>Source folder</h2>
+    <p class="hint" id="srcHint">Every PNG in this folder and its subfolders will be processed. Originals are never modified.</p>
+    <div class="row">
+      <input type="text" id="inp" placeholder="C:\path\to\media" spellcheck="false" aria-label="Source folder path">
+      <button id="bIn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Browse</button>
+    </div>
+    <div class="scan" id="scan"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>Output folder</h2>
+    <p class="hint">Compressed copies are written here, with the same folder structure. You can pick the source folder itself to work in place.</p>
+    <div class="row">
+      <input type="text" id="out" placeholder="C:\path\to\output" spellcheck="false" aria-label="Output folder path">
+      <button id="bOut"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Browse</button>
+      <button id="bSame" type="button" title="Use the source folder as the output">Same as source</button>
+    </div>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:14px;cursor:pointer"><input type="checkbox" id="dates" checked> Keep the original creation, modified and accessed dates</label>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="over"> Overwrite files that already exist in the output <span class="hint" style="margin:0">(otherwise they are skipped)</span></label>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:10px;font-size:14px;cursor:pointer"><input type="checkbox" id="del"> Delete each original after it is converted successfully</label>
+    <div class="scan" id="sameNote"></div>
+  </section>
+
+  <!-- IMAGE SETTINGS -->
+  <section class="card" id="setImg">
+    <h2><span class="step">3</span>Settings</h2>
+    <p class="hint">Choose the output format.</p>
+    <div class="seg" role="radiogroup" aria-label="Output format">
+      <label><input type="radio" name="mode" value="jpg" checked><div class="opt"><strong>JPEG &middot; smallest</strong><span>Typically 80&ndash;90% smaller. Metadata is copied into the file.</span></div></label>
+      <label><input type="radio" name="mode" value="png"><div class="opt"><strong>PNG &middot; lossless</strong><span>Pixel-identical, typically 5&ndash;15% smaller. Metadata untouched.</span></div></label>
+    </div>
+    <div class="field" id="qField">
+      <div class="top"><span>JPEG quality</span><small id="qv"></small></div>
+      <input type="range" id="q" min="70" max="98" value="90" aria-label="JPEG quality">
+      <div class="ticks"><span>Smaller</span><span>Balanced</span><span>Best quality</span></div>
+    </div>
+    <div class="field">
+      <div class="top"><span>Parallel workers</span><small id="wv"></small></div>
+      <input type="range" id="w" min="1" max="8" value="4" aria-label="Parallel workers">
+      <div class="ticks"><span>Gentler on the PC</span><span>Faster</span></div>
+    </div>
+  </section>
+
+  <!-- VIDEO SETTINGS -->
+  <section class="card" id="setVid" hidden>
+    <h2><span class="step">3</span>Video settings</h2>
+    <p class="hint">Defaults keep every frame and the original audio, and use AV1 for the smallest file.</p>
+    <div class="msg warn" id="noFf" hidden style="margin:0 0 16px">FFmpeg was not found on this PC. Install it with <code>winget install Gyan.FFmpeg</code> in a terminal, then restart this app.</div>
+    <div class="seg" style="--n:3" role="radiogroup" aria-label="Video codec">
+      <label><input type="radio" name="codec" value="av1" checked><div class="opt"><strong>AV1 &middot; smallest</strong><span>About 45% smaller than H.264 at the same quality. Slower to encode.</span></div></label>
+      <label><input type="radio" name="codec" value="h265"><div class="opt"><strong>H.265 &middot; small</strong><span>About 30% smaller than H.264. Some apps won&rsquo;t preview it.</span></div></label>
+      <label><input type="radio" name="codec" value="h264"><div class="opt"><strong>H.264 &middot; compatible</strong><span>Plays everywhere, including Discord previews.</span></div></label>
+    </div>
+
+    <div class="field">
+      <div class="seg" role="radiogroup" aria-label="Sizing method">
+        <label><input type="radio" name="vmode" value="crf" checked><div class="opt"><strong>Set the quality</strong><span>Steady quality; file size depends on the video.</span></div></label>
+        <label><input type="radio" name="vmode" value="size"><div class="opt"><strong>Aim for a file size</strong><span>Hits a size limit such as Discord&rsquo;s; quality adapts.</span></div></label>
+      </div>
+    </div>
+    <div class="field" id="crfField">
+      <div class="top"><span>Quality (CRF)</span><small id="crfv"></small></div>
+      <input type="range" id="crf" min="20" max="63" value="42" aria-label="Video quality">
+      <div class="ticks"><span>Better quality, bigger file</span><span>Smaller file, softer picture</span></div>
+    </div>
+    <div class="field" id="sizeField" hidden>
+      <div class="top"><span>Target size per video</span><small>Each video is squeezed to this size or less</small></div>
+      <div class="sz"><input type="number" id="tmb" min="1" max="100000" step="1" value="10" aria-label="Target size in megabytes"><span>MB</span></div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <details>
+      <summary>Advanced options</summary>
+      <div class="adv">
+        <div><label for="vSpeed">Encoding effort</label><select id="vSpeed"><option value="fast">Low (fast, larger files)</option><option value="balanced" selected>Medium</option><option value="slow">High (slow, smaller files)</option></select></div>
+        <div><label for="vEngine">Encoder</label><select id="vEngine"><option value="cpu" selected>CPU</option><option value="gpu">NVIDIA GPU (faster, larger files)</option></select></div>
+        <div><label for="vScale">Resolution</label><select id="vScale"><option value="orig" selected>Keep original</option><option value="2160">Max 2160p (4K)</option><option value="1440">Max 1440p</option><option value="1080">Max 1080p</option><option value="720">Max 720p</option><option value="480">Max 480p</option><option value="360">Max 360p</option></select></div>
+        <div><label for="vFps">Frame rate</label><select id="vFps"><option value="orig" selected>Keep every frame</option><option value="60">Limit to 60 fps</option><option value="30">Limit to 30 fps</option></select></div>
+        <div><label for="vAudio">Audio</label><select id="vAudio"><option value="copy" selected>Keep original (no re-encode)</option><option value="aac96">AAC 96 kbps</option><option value="aac128">AAC 128 kbps</option><option value="aac192">AAC 192 kbps</option><option value="opus64">Opus 64 kbps</option><option value="opus96">Opus 96 kbps</option><option value="opus128">Opus 128 kbps</option><option value="none">Remove audio</option></select></div>
+        <div><label for="vCont">File type</label><select id="vCont"><option value="mp4" selected>MP4 (most compatible)</option><option value="mkv">MKV</option></select></div>
+        <div><label for="vSkip">Already-compressed videos</label><select id="vSkip"><option value="yes" selected>Keep as they are</option><option value="no">Re-encode anyway</option></select></div>
+        <div><label for="vPar">Videos at once</label><select id="vPar"><option value="1" selected>1 (uses all CPU cores)</option><option value="2">2</option><option value="3">3</option></select></div>
+        <div class="full"><span class="hint" style="margin:0">Metadata is always kept. Sound is copied untouched unless you change it.</span><button class="link" id="vReset" type="button">Reset to defaults</button></div>
+      </div>
+    </details>
+  </section>
+
+  <div class="actions">
+    <button class="primary" id="go" disabled>Start compressing</button>
+    <button class="danger" id="stop" hidden>Cancel</button>
+    <button id="est" disabled>Estimate time &amp; savings</button>
+    <span class="note" id="goNote">Choose a source and an output folder to begin.</span>
+  </div>
+
+  <section class="card" id="estCard" hidden>
+    <h2>Estimate</h2>
+    <div id="estBody" style="margin-top:8px"></div>
+  </section>
+
+  <section class="card" id="prog" hidden>
+    <div class="prog-head">
+      <div><div class="pct" id="pct">0%</div><div class="state" id="state">Starting&hellip;</div></div>
+      <div class="state" id="eta" style="text-align:right"></div>
+    </div>
+    <div class="bar" id="bar"><i id="fill"></i></div>
+    <div class="grid">
+      <div class="stat"><div class="v" id="sDone">0</div><div class="k" id="sTotalK">of 0 files</div></div>
+      <div class="stat ok"><div class="v" id="sVer">0</div><div class="k" id="kVer">Metadata verified</div></div>
+      <div class="stat"><div class="v" id="sNo">0</div><div class="k" id="kNo">No metadata to copy</div></div>
+      <div class="stat bad"><div class="v" id="sBad">0</div><div class="k">Problems</div></div>
+    </div>
+    <div class="savings" id="sav" hidden><span id="savMain"></span><small id="savSub"></small></div>
+    <div class="msg warn" id="flatMsg" hidden></div>
+    <div class="msg warn" id="overMsg" hidden></div>
+    <div class="msg bad" id="badMsg" hidden></div>
+  </section>
+
+  <footer>Runs a small server on 127.0.0.1 only. No file names, media content or metadata are ever shown here or sent anywhere.</footer>
+</div>
+
+<dialog id="dlg"><form method="dialog" class="dl"><h3 id="dT"></h3><p id="dM"></p><div class="dbtn"><button value="no" id="dNo">Cancel</button><button value="yes" id="dYes" class="primary" style="padding:10px 20px" autofocus>OK</button></div></form></dialog>
+<script>
+const TOKEN="__TOKEN__";
+const $=id=>document.getElementById(id);
+async function api(path,body){
+  const r=await fetch(path,{method:body?'POST':'GET',headers:{'X-Token':TOKEN,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(!r.ok) throw new Error(path+' '+r.status); return r.json();
+}
+const fmtB=b=>b>=1e9?(b/1e9).toFixed(2)+' GB':b>=1e6?(b/1e6).toFixed(1)+' MB':(b/1e3).toFixed(0)+' KB';
+const fmtT=s=>{s=Math.max(0,Math.round(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h} h ${m} min`:m?`${m} min ${s%60} s`:`${s} s`};
+function ask(title,msg,yes,danger,single){
+  $('dT').textContent=title;$('dM').textContent=msg;$('dYes').textContent=yes||'OK';$('dYes').className=(danger?'warnbtn':'primary');$('dYes').style.padding='10px 20px';$('dNo').hidden=!!single;
+  return new Promise(res=>{const d=$('dlg');d.returnValue='no';d.onclose=()=>res(d.returnValue==='yes');d.showModal();});
+}
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}}, lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+let estRunning=false, kind=['videos','both'].includes(lsGet('mc_kind'))?lsGet('mc_kind'):'images', scanCount=0, running=false, scanTimer=null, ffOk=true;
+
+/* ---- codec presets: quality range and default per codec/encoder ---- */
+const RANGE={cpu:{av1:[20,63,42],h265:[18,40,28],h264:[16,36,23]},gpu:{av1:[15,55,34],h265:[15,50,30],h264:[15,45,27]}};
+const CHIPS=[[10,'Discord (free)'],[25,'25 MB'],[50,'50 MB'],[100,'100 MB']];
+const codec=()=>document.querySelector('input[name=codec]:checked').value;
+const vmode=()=>document.querySelector('input[name=vmode]:checked').value;
+const imode=()=>document.querySelector('input[name=mode]:checked').value;
+
+function setRange(reset){
+  const [lo,hi,def]=RANGE[$('vEngine').value][codec()];
+  $('crf').min=lo; $('crf').max=hi; if(reset||+$('crf').value<lo||+$('crf').value>hi) $('crf').value=def;
+}
+function labels(){
+  const q=+$('q').value; $('qv').textContent=q+' \u00b7 '+(q<=86?'smaller':q<=92?'balanced':'high quality');
+  $('wv').textContent=$('w').value+(+$('w').value===1?' worker':' workers');
+  $('qField').hidden=imode()!=='jpg';
+  const c=+$('crf').value,lo=+$('crf').min,hi=+$('crf').max,p=(c-lo)/(hi-lo);
+  $('crfv').textContent=c+' \u00b7 '+(p<.34?'high quality':p<.62?'balanced':'small file');
+  $('crfField').hidden=vmode()!=='crf'; $('sizeField').hidden=vmode()!=='size';
+  document.querySelectorAll('.chip').forEach(b=>b.setAttribute('aria-pressed',String(+$('tmb').value===+b.dataset.mb)));
+}
+function videoOpts(){
+  return {codec:codec(),engine:$('vEngine').value,crf:+$('crf').value,speed:$('vSpeed').value,scale:$('vScale').value,fps:$('vFps').value,
+          audio:$('vAudio').value,skip:$('vSkip').value,container:$('vCont').value,target_mb:vmode()==='size'?+$('tmb').value:0};
+}
+function resetVideo(){
+  document.querySelector('input[name=codec][value=av1]').checked=true; document.querySelector('input[name=vmode][value=crf]').checked=true;
+  $('vEngine').value='cpu'; $('vSpeed').value='balanced'; $('vScale').value='orig'; $('vFps').value='orig'; $('vAudio').value='copy'; $('vCont').value='mp4'; $('vSkip').value='yes'; $('vPar').value='1';
+  $('tmb').value=10; setRange(true); labels();
+}
+function setKind(k){
+  kind=k; lsSet('mc_kind',k);
+  $('tImg').setAttribute('aria-selected',String(k==='images')); $('tVid').setAttribute('aria-selected',String(k==='videos'));
+  $('tBoth').setAttribute('aria-selected',String(k==='both')); $('setImg').hidden=k==='videos'; $('setVid').hidden=k==='images';
+  $('srcHint').textContent=k==='images'?'Every PNG in this folder and its subfolders will be processed. Originals are never modified.':k==='both'?'Every PNG and every video in this folder and its subfolders will be processed. Originals are never modified.':'Every video (mp4, mkv, mov, avi, webm and more) in this folder and its subfolders will be processed. Originals are never modified.';
+  scanCount=0; $('scan').textContent=''; rescan(); refresh();
+}
+function sameNote(){
+  const same=$('inp').value.trim()&&$('inp').value.trim().toLowerCase()===$('out').value.trim().toLowerCase();
+  $('sameNote').innerHTML=same?'<span style="color:var(--warn)">Same folder: results are saved next to the originals. Files that would land on the exact same name are skipped unless &ldquo;Overwrite&rdquo; is ticked, in which case the original is replaced.</span>':'';
+}
+function refresh(){ sameNote();
+  const ok=!running&&scanCount>0&&$('out').value.trim()&&(kind==='images'||ffOk);
+  $('go').disabled=!ok; $('est').disabled=!ok||estRunning;
+  $('goNote').textContent=running?'':ok?`Ready: ${scanCount.toLocaleString()} ${kind==='images'?'PNG':kind==='both'?'media':'video'} file${scanCount===1?'':'s'} will be processed.`:(kind!=='images'&&!ffOk?'FFmpeg is needed for videos (see above).':'Choose a source and an output folder to begin.');
+}
+async function scan(){
+  const p=$('inp').value.trim(); lsSet('ic_in',p); lsSet('ic_out',$('out').value.trim());
+  if(!p){$('scan').textContent='';scanCount=0;return refresh();}
+  try{const r=await api('/api/scan',{input:p,output:$('out').value.trim(),kind});
+    scanCount=r.count; const w=kind==='images'?'PNG':kind==='both'?'media':'video';
+    $('scan').innerHTML=!r.valid?'<span style="color:var(--bad)">Folder not found.</span>':r.count?`Found <b>${r.count.toLocaleString()}</b> ${w} file${r.count===1?'':'s'} &middot; <b>${fmtB(r.bytes)}</b>`:`No ${w} files found in this folder.`;
+  }catch(e){}
+  refresh();
+}
+const rescan=()=>{clearTimeout(scanTimer);scanTimer=setTimeout(scan,350)};
+async function browse(which){
+  const r=await api('/api/pick',{title:which==='inp'?'Select the source folder':'Select the output folder',start:$(which).value.trim()});
+  if(r.path){$(which).value=r.path;rescan();}
+}
+
+/* ---- wiring ---- */
+$('inp').value=lsGet('ic_in')||''; $('out').value=lsGet('ic_out')||'';
+const cpu=navigator.hardwareConcurrency||8; $('w').max=Math.max(2,cpu); $('w').value=Math.max(1,Math.min(Math.floor(cpu/2),8));
+CHIPS.forEach(([mb,t])=>{const b=document.createElement('button');b.type='button';b.className='chip';b.dataset.mb=mb;b.textContent=mb===10?`${mb} MB \u00b7 ${t}`:t;b.onclick=()=>{$('tmb').value=mb;labels();};$('chips').appendChild(b);});
+$('tImg').onclick=()=>!running&&setKind('images'); $('tVid').onclick=()=>!running&&setKind('videos'); $('tBoth').onclick=()=>!running&&setKind('both');
+$('bSame').onclick=()=>{$('out').value=$('inp').value;rescan();}
+$('bIn').onclick=()=>browse('inp'); $('bOut').onclick=()=>browse('out');
+['inp','out'].forEach(i=>$(i).addEventListener('input',rescan));
+document.querySelectorAll('input[name=mode],input[name=vmode]').forEach(e=>e.onchange=labels);
+document.querySelectorAll('input[name=codec]').forEach(e=>e.onchange=()=>{setRange(true);labels();});
+$('vEngine').onchange=()=>{setRange(true);labels();};
+['q','w','crf','tmb'].forEach(i=>$(i).oninput=labels); $('vReset').onclick=resetVideo;
+
+$('go').onclick=async()=>{
+  const same=$('inp').value.trim().toLowerCase()===$('out').value.trim().toLowerCase();
+  if(($('del').checked||(same&&$('over').checked))&&!await ask('Replace or delete your originals?','This permanently replaces or deletes your original files. There is no undo.','Yes, continue',true)) return;
+  const body={kind,keep_dates:$('dates').checked,overwrite:$('over').checked,delete_orig:$('del').checked,input:$('inp').value.trim(),output:$('out').value.trim(),mode:imode(),quality:+$('q').value,workers:+$('w').value,vworkers:+$('vPar').value,video:videoOpts()};
+  try{await api('/api/start',body);
+    running=true;$('prog').hidden=false;$('go').hidden=true;$('stop').hidden=false;$('goNote').textContent='';
+    $('sav').hidden=true;['flatMsg','overMsg','badMsg'].forEach(i=>$(i).hidden=true);
+    $('kVer').textContent=kind!=='images'?'Converted':'Metadata verified'; $('kNo').textContent=kind!=='images'?'Skipped (already done)':'No metadata to copy';
+    poll();
+  }catch(e){ask('Could not start','Check the folders'+(kind!=='images'?' and that FFmpeg is installed':'')+'.','OK',false,true);}
+};
+function cfgBody(){return {kind,keep_dates:$('dates').checked,overwrite:$('over').checked,delete_orig:$('del').checked,input:$('inp').value.trim(),output:$('out').value.trim(),mode:imode(),quality:+$('q').value,workers:+$('w').value,vworkers:+$('vPar').value,video:videoOpts()};}
+$('est').onclick=async()=>{
+  try{await api('/api/estimate',cfgBody());}catch(e){ask('Could not start the estimate','Check the source folder.','OK',false,true);return;}
+  estRunning=true;refresh();$('estCard').hidden=false;$('estBody').innerHTML='<span class="state">Test-compressing a few sample files on this PC&hellip; this can take up to a minute.</span>';pollEst();
+};
+async function pollEst(){
+  try{const s=await api('/api/state');const e=s.est||{};
+    if(e.status==='running'){setTimeout(pollEst,800);return;}
+    estRunning=false;refresh();
+    if(e.status!=='done'){$('estBody').innerHTML='<span style="color:var(--bad)">Could not estimate.</span>';return;}
+    const sv=e.in_bytes?100*(1-e.out_bytes/e.in_bytes):0,row=(n,x)=>x?`<div class="state">${n}: ${x.count.toLocaleString()} files &middot; ${fmtB(x.in_bytes)} &rarr; ~${fmtB(x.out_bytes)} &middot; ~${fmtT(x.sec)}</div>`:'';
+    $('estBody').innerHTML=`<div class="savings" style="margin:0 0 10px"><span>About ${fmtT(e.sec)}</span><span>${fmtB(e.in_bytes)} &rarr; ~${fmtB(e.out_bytes)} &middot; ~${Math.max(0,sv).toFixed(0)}% smaller</span></div>${row('Images',e.images)}${row('Videos',e.videos)}<div class="state" style="margin-top:8px">Based on test-compressing sample files with the options above on this PC. It is a rough guide: real time and size vary with the content.</div>`;
+  }catch(err){setTimeout(pollEst,1500);}
+}
+$('stop').onclick=async()=>{$('stop').disabled=true;await api('/api/cancel',{});};
+
+function render(s){
+  ffOk=s.ffmpeg; $('noFf').hidden=s.ffmpeg;
+  const vid=s.kind!=='images', prog=s.total?Math.min(1,(s.done+(s.partial||0))/s.total):0, pct=Math.floor(prog*100);
+  $('pct').textContent=pct+'%'; $('fill').style.width=pct+'%';
+  $('sDone').textContent=s.done.toLocaleString(); $('sTotalK').textContent='of '+s.total.toLocaleString()+(s.kind==='both'?' files':vid?' videos':' images');
+  $('sVer').textContent=(vid?s.converted:s.verified).toLocaleString(); $('sNo').textContent=(vid?s.skipped:s.noparams).toLocaleString(); $('sBad').textContent=s.problems.toLocaleString();
+  const fin=['done','cancelled','error'].includes(s.status);
+  $('state').textContent={running:'Compressing\u2026 elapsed '+fmtT(s.elapsed),done:'Finished in '+fmtT(s.elapsed),cancelled:'Cancelled after '+fmtT(s.elapsed),error:'Stopped by an error ('+s.error+')',idle:''}[s.status]||'';
+  $('eta').textContent=(s.status==='running'&&prog>0.02)?'About '+fmtT(s.elapsed/prog*(1-prog))+' left':'';
+  $('bar').classList.toggle('done',s.status==='done');
+  if(s.in_bytes>0){$('sav').hidden=false;const sv=100*(1-s.out_bytes/s.in_bytes);
+    $('savMain').textContent=`${fmtB(s.in_bytes)} \u2192 ${fmtB(s.out_bytes)}  \u00b7  ${sv.toFixed(0)}% smaller`;$('savSub').textContent=`${fmtB(Math.max(0,s.in_bytes-s.out_bytes))} saved`;}
+  $('flatMsg').hidden=!s.flattened; if(s.flattened)$('flatMsg').textContent=`${s.flattened.toLocaleString()} image(s) had transparency, which JPEG cannot store; it was placed on a white background.`;
+  $('overMsg').hidden=!s.overtarget; if(s.overtarget)$('overMsg').textContent=`${s.overtarget.toLocaleString()} video(s) could not reach the target size. Try a smaller target with lower resolution, or a slower encoding effort.`;
+  $('badMsg').hidden=!s.problems; if(s.problems)$('badMsg').textContent=`${s.problems.toLocaleString()} file(s) had a problem. Details are in compress_log.txt inside your output folder (on this PC only).`;
+  if(fin){running=false;$('go').hidden=false;$('stop').hidden=true;$('stop').disabled=false;refresh();}
+}
+async function poll(){
+  try{const s=await api('/api/state');render(s);if(s.status==='running'){setTimeout(poll,500);return;}}catch(e){setTimeout(poll,1500);}
+}
+// tell the local server the window is still open / has been closed, so the program quits with it
+setInterval(()=>{api('/api/ping',{}).catch(()=>{})},5000);
+window.addEventListener('pagehide',()=>{navigator.sendBeacon('/api/bye?t='+TOKEN,'x')});
+window.addEventListener('beforeunload',e=>{if(running){e.preventDefault();e.returnValue='';}});
+
+setRange(true); labels(); setKind(kind);
+api('/api/state').then(s=>{ffOk=s.ffmpeg;$('noFf').hidden=s.ffmpeg;refresh();
+  if(s.status==='running'){running=true;setKind(s.kind);$('prog').hidden=false;$('go').hidden=true;$('stop').hidden=false;poll();}}).catch(()=>{});
+</script>
+</body>
+</html>
