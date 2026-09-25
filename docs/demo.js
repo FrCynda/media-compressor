@@ -125,6 +125,7 @@ async function ff(){
   return FF=f;
 }
 async function video(file,o){
+  if(o.codec!=='h264'||o.engine==='gpu'){if(await canWC(o))try{return await webcodecs(file,o);}catch(e){if(o.codec!=='h264'||cancel)throw e;console.warn('WebCodecs failed, using ffmpeg:',e.message);}else if(o.codec!=='h264')throw new Error('codec not available in this browser');}
   const f=await ff(),inn='in'+ext(file.name),outn='out.'+o.container;ffDur=0;CUR=0;
   await f.writeFile(inn,new Uint8Array(await file.arrayBuffer()));
   const vf=[];
@@ -143,6 +144,39 @@ async function video(file,o){
   if(rc!==0)throw new Error('ffmpeg '+rc);
   const data=await f.readFile(outn);await f.deleteFile(inn).catch(()=>{});await f.deleteFile(outn).catch(()=>{});
   return new Blob([data]);
+}
+
+/* ---- video via WebCodecs (mediabunny): AV1, H.265 and hardware encoding. Bitrate-based, so CRF is mapped to a bitrate ---- */
+let MB=null,STOP=null;const mb=async()=>MB||(MB=await import('./mediabunny.mjs'));
+const MBC={av1:'av1',h265:'hevc',h264:'avc'};
+// rough bits per pixel per frame at each codec's default quality; +/-6 CRF (8 for AV1) doubles/halves it
+const BPP={av1:[0.05,42,8],h265:[0.06,28,6],h264:[0.09,23,6]};
+async function canWC(o){const M=await mb();return M.canEncodeVideo(MBC[o.codec],{width:1280,height:720});}
+async function webcodecs(file,o){
+  const M=await mb(),input=new M.Input({source:new M.BlobSource(file),formats:M.ALL_FORMATS});
+  const vt=await input.getPrimaryVideoTrack();if(!vt)throw new Error('no video track');
+  const dur=await input.computeDuration()||1,st=await vt.computePacketStats(300),srcFps=st.averagePacketRate||30;
+  let w=vt.displayWidth,h=vt.displayHeight;
+  if(o.scale!=='orig'&&h>+o.scale){w=Math.round(w*+o.scale/h/2)*2;h=+o.scale;}
+  const fps=o.fps!=='orig'&&srcFps>+o.fps?+o.fps:0,outFps=fps||srcFps,audioBps=o.audio==='copy'?128e3:+o.audio.slice(3)*1e3;
+  const [base,def,step]=BPP[o.codec];
+  let bitrate=o.target_mb?o.target_mb*8*1048576*.93/dur-audioBps:base*w*h*outFps*Math.pow(2,(def-o.crf)/step);
+  bitrate=Math.round(Math.max(50e3,Math.min(bitrate,file.size*8/dur*.95)));   // never bigger than the source
+  const aac=o.audio!=='copy'&&await M.canEncodeAudio('aac');
+  let blob;
+  for(let attempt=0;attempt<2;attempt++){
+    const output=new M.Output({format:o.container==='mkv'?new M.MkvOutputFormat():new M.Mp4OutputFormat(),target:new M.BufferTarget()});
+    const conv=await M.Conversion.init({input,output,
+      video:{codec:MBC[o.codec],bitrate,forceTranscode:true,hardwareAcceleration:o.engine==='gpu'?'prefer-hardware':o.codec==='h265'?'no-preference':'prefer-software',...(o.scale!=='orig'&&{width:w,height:h,fit:'fill'}),...(fps&&{frameRate:fps})},
+      audio:o.audio==='copy'||!aac?{}:{codec:'aac',bitrate:audioBps}});
+    if(!conv.isValid)throw new Error('conversion not possible: '+conv.discardedTracks.map(t=>t.reason).join(','));
+    conv.onProgress=p=>{CUR=p;};STOP=()=>conv.cancel();
+    await conv.execute();STOP=null;
+    blob=new Blob([output.target.buffer]);
+    if(!o.target_mb||blob.size<=o.target_mb*1048576||attempt)break;
+    bitrate=Math.round(Math.max(50e3,bitrate*o.target_mb*1048576*.95/blob.size));   // overshot: one more pass with a corrected bitrate
+  }
+  return blob;
 }
 
 /* ---- jobs ---- */
@@ -170,7 +204,7 @@ async function run(b){
       }
       S.out_bytes+=blob.size;
       if(b.delete_orig&&!(dst===H.inp&&name===it.name))await it.dir?.removeEntry(it.name).catch(()=>{});
-    }catch(e){console.error(e);S.problems++;}
+    }catch(e){console.error(e);if(!cancel)S.problems++;}
     S.done++;
   };
   await pool(items,b.workers,one);await pool(vids,1,one);
@@ -196,6 +230,16 @@ async function estimate(b){
   }catch(e){console.error(e);EST={status:'error'};}
 }
 
+/* grey out what this browser can't encode, and rename the GPU option */
+(async()=>{
+  const g=document.querySelector('#vEngine option[value=gpu]');if(g)g.textContent='Hardware encoder (GPU, faster, larger files)';
+  for(const c of ['av1','h265']){
+    if(await canWC({codec:c}).catch(()=>false))continue;
+    const r=document.querySelector(`input[name=codec][value=${c}]`),l=r?.closest('label');if(!l)continue;
+    r.disabled=true;l.style.opacity=.5;l.querySelector('span').textContent='Not available in this browser (try Chrome or Edge).';
+  }
+})();
+
 window.DEMO=async(path,body)=>{
   if(path==='/api/state'){const end=S.end||Date.now()/1000;return {...S,partial:S.status==='running'?CUR:0,elapsed:S.start?end-S.start:0,ffmpeg:true,est:EST};}
   if(path==='/api/pick'){
@@ -215,10 +259,11 @@ window.DEMO=async(path,body)=>{
   if(path==='/api/start'||path==='/api/estimate'){
     if(!H.inp||body.input!==H.inp.name)throw new Error('input');
     if(body.output===body.input)H.out=same();else if(!H.out||body.output!==H.out.name)throw new Error('output');
-    body.video={...body.video,codec:'h264',engine:'cpu'};
+    if(path==='/api/start'&&body.kind!=='images'&&body.video.codec!=='h264'&&!await canWC(body.video)){
+      alert((body.video.codec==='av1'?'AV1':'H.265')+' encoding is not available in this browser (Chrome or Edge on a computer, with hardware support for H.265). Pick H.264, or use the Windows app.');throw new Error('codec');}
     (path==='/api/start'?run:estimate)(body);return {ok:true};
   }
-  if(path==='/api/cancel'){cancel=true;return {ok:true};}
+  if(path==='/api/cancel'){cancel=true;STOP?.();return {ok:true};}
   return {};
 };
 })();

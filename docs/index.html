@@ -124,7 +124,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center;margin-top:24px}
     </span>
   </header>
 
-  <div class="msg warn" style="margin:0 0 16px"><b>Browser demo.</b> Runs in this tab on your own files (Chrome/Edge write straight into your output folder; Firefox/Safari read the source folder and give you the results as a ZIP): pick folders with Browse. Video is H.264 only (slow, ffmpeg.wasm); metadata and file dates are not preserved. AV1, H.265, GPU and lossless PNG optimising need the <a href="https://github.com/FrCynda/media-compressor/releases" style="color:inherit">Windows app</a>.</div>
+  <div class="msg warn" style="margin:0 0 16px"><b>Browser demo.</b> Everything runs in this tab on your own files, nothing is uploaded. Chrome/Edge write straight into your output folder; Firefox/Safari read the source folder and give you a ZIP. Video: H.264 uses ffmpeg (multi-threaded WASM); AV1, H.265 and hardware encoding use your browser's built-in encoder when it has one, and are set by bitrate rather than true CRF. Original file dates are only kept inside the ZIP. For the exact results of the real tools, use the <a href="https://github.com/FrCynda/media-compressor/releases" style="color:inherit">Windows app</a>.</div>
   <div class="tabs" role="tablist" aria-label="What to compress">
     <button role="tab" id="tImg" aria-selected="true">Images (PNG)</button>
     <button role="tab" id="tVid" aria-selected="false">Videos</button>
